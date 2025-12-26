@@ -1,0 +1,8 @@
+# Nginx Analytics Digest Requirements
+# For traditional pip/venv installations
+# Install with: pip install -r requirements.txt
+
+geoip2>=5.2.0
+llm>=0.28
+llm-deepseek>=0.1.6
+python-dotenv>=1.0.0

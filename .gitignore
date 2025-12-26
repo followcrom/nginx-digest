@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# LLM configuration (project-specific)
+.llm/
+
+# Environment variables
+.env
+
+# Log files
+nginx_digest.log
+
+# GeoIP config
+GeoIP.conf
