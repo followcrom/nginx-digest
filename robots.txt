@@ -1,0 +1,42 @@
+# Block known malicious/aggressive bots
+User-agent: AhrefsBot
+User-agent: SemrushBot
+User-agent: MJ12bot
+User-agent: DotBot
+User-agent: SeznamBot
+User-agent: BLEXBot
+User-agent: PetalBot
+User-agent: DataForSeoBot
+User-agent: serpstatbot
+User-agent: Bytespider
+User-agent: GPTBot
+User-agent: CCBot
+Disallow: /
+
+# Block AI training scrapers
+# User-agent: anthropic-ai
+# User-agent: Claude-Web
+# User-agent: cohere-ai
+# User-agent: Omgilibot
+User-agent: Omgili
+User-agent: FacebookBot
+Disallow: /
+
+# Good bots - allow with restrictions
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: Slurp
+User-agent: DuckDuckBot
+Disallow: /contact/
+Disallow: /wotd/subscribe.php
+Disallow: /adom_splitter/random_wisdom.php
+Disallow: /momcon/
+Disallow: /*.php$
+
+# All other bots
+User-agent: *
+Disallow: /contact/
+Disallow: /wotd/subscribe.php
+Disallow: /adom_splitter/random_wisdom.php
+Disallow: /momcon/
+Disallow: /*.php$

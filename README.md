@@ -78,12 +78,41 @@ Edit the `CONFIG` dictionary in `nginx_digest.py`:
 
 ### 🕓 Scheduling with Cron
 
-Run daily at 6 AM:
+Run daily at 6 AM.
+
+Option 1: Send output to cron.log
+
 ```cron
 0 6 * * * /var/www/digest/run_digest.sh >> /var/www/digest/cron.log 2>&1
-# or
-0 6 * * * /var/www/digest/run_digest.sh >> /dev/null 2>&1  # discard output
 ```
+
+`cron.log` should be empty as the job is silent unless there are errors.
+
+Option 2: Redirect to /dev/null (Recommended)
+
+```cron
+0 6 * * * /var/www/digest/run_digest.sh > /dev/null 2>&1
+```
+
+This discards any stdout/stderr from the script itself. Since all meaningful logs go to nginx_digest.log, you won't lose anything.
+
+Option 3: Remove redirect entirely
+
+Add this at the top of your crontab:
+
+```cron
+MAILTO="followcrom@gmail.com"
+```
+
+The MAILTO variable applies to all cron jobs below it. If anything unexpected outputs to stdout/stderr, cron will email it to you. Then the cron job line will be:
+
+```cron
+0 6 * * * /var/www/digest/run_digest.sh
+```
+
+With this version, you'll only get an email if something goes wrong and the script outputs an error that wasn't caught and logged to nginx_digest.log.   
+
+The MAILTO is redundant since your bash script already handles errors, but it's a good safety net in case something goes wrong with the script itself (like syntax error, missing file, etc.).
 
 <br>
 
@@ -225,53 +254,16 @@ uv add llm
 
 ---
 
-## Optional: Enhanced User Agent Parsing
+## 📅 Commit Activity 🕹️
 
-The script includes fallback parsing for user agents (browser, OS, device type) that works without additional dependencies. For more accurate and detailed user agent analysis, install the `user-agents` library:
+![GitHub last commit](https://img.shields.io/github/last-commit/followcrom/nginx-digest)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/followcrom/nginx-digest)
+![GitHub repo size](https://img.shields.io/github/repo-size/followcrom/nginx-digest)
 
-```bash
-pip install user-agents
-```
+## ✍ Authors 
 
-**With `user-agents` installed:**
-- Detailed browser versions (e.g., "Chrome 120.0.6099.129")
-- Specific OS versions (e.g., "Windows 10", "iOS 17.2.1")
-- Better bot detection
-- More accurate device categorization
+🌍 followCrom: [followcrom.com](https://followcrom.com/index.html) 🌐
 
-**Without it:**
-- Basic parsing using string matching still works
-- Less detailed but sufficient for most use cases (e.g., "Chrome", "Mobile vs Desktop")
+📫 followCrom: [get in touch](https://followcrom.com/contact/contact.php) 👋
 
-## Issues
-
-You can confirm by checking the response codes in your logs:
-bash
-grep "\.env" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
-If you see 404 — they found nothing, you're fine.
-If you see 200 — that file is being served, which is a problem.
-
-
-Quick hardening if you haven't already:
-
-Block .env explicitly in nginx:
-
-nginx   location ~ /\.env {
-       deny all;
-       return 404;
-   }
-
-Block common probe paths:
-
-nginx   location ~* ^/(wp-admin|wp-content|wp-includes|xmlrpc\.php|admin\.php) {
-       deny all;
-       return 404;
-   }
-
-Consider fail2ban to auto-block IPs that hit these paths repeatedly.
-
-For your digest, you might want to separate these out—maybe a "Suspicious Requests" section that filters known probe patterns, so they don't pollute your "Top Pages" with junk. Something like:
-pythonPROBE_PATTERNS = ['.env', 'wp-', 'admin.php', 'xmlrpc', '.php']
-
-def is_probe(path):
-    return any(p in path.lower() for p in PROBE_PATTERNS)
+[![Static Badge](https://img.shields.io/badge/followcrom-online-orange)](http://followcrom.com)

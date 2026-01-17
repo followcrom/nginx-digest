@@ -20,3 +20,10 @@ nginx_digest.log
 
 # GeoIP config
 GeoIP.conf
+
+# Images
+imgs/
+
+# Nginx configuration files
+fc
+block_probes.conf

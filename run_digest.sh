@@ -14,6 +14,11 @@ cd /var/www/digest || {
 # Activate virtual environment
 source "$VENV_PATH/bin/activate"
 
+# Add timestamp header to log
+echo "========================================" >> "$LOG_FILE"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Nginx Analytics" >> "$LOG_FILE"
+echo "========================================" >> "$LOG_FILE"
+
 # Run Python script
 python_output=$(python "$SCRIPT_PATH" 2>&1)
 exit_code=$?
