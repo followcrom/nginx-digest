@@ -27,3 +27,12 @@ imgs/
 # Nginx configuration files
 fc
 block_probes.conf
+
+# Digest history (rolling baseline data)
+digest_history.jsonl
+
+# Tests
+tests/
+
+# Markdown files
+*.md
