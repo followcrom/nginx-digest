@@ -179,24 +179,7 @@ Status on the box (checked 2026-09-16): `GeoLite2-City.mmdb` was present but nin
 
 ### 🤖🧠 LLM Setup 👾
 
-This project uses a **project-specific LLM configuration**. This means:
-
-- Fresh model lists (no inherited models from global config)
-- Separate API keys
-- Independent settings
-- Configuration stored in `.llm/` within this project (gitignored)
-
-Set a custom location for the config directory by setting the LLM_USER_PATH environment variable:
-
-`export LLM_USER_PATH=./.llm/`
-
-When you run `llm` commands, it will use this directory for config and keys.
-
-#### Changing the model
-
-The model is set by `CONFIG["llm_model"]` in `nginx_digest.py` (currently `deepseek-flash`).
-
-DeepSeek models are registered in `.llm/extra-openai-models.yaml` through llm's built-in OpenAI-compatible support, not the `llm-deepseek` plugin. That plugin (0.1.6, the latest release) only knows the retired names `deepseek-chat`/`deepseek-reasoner`. Because `.llm/` is gitignored, create or edit this file on the server too:
+DeepSeek models are registered in `.llm/extra-openai-models.yaml` through llm's built-in OpenAI-compatible support:
 
 ```yaml
 - model_id: deepseek-flash
@@ -209,16 +192,11 @@ DeepSeek models are registered in `.llm/extra-openai-models.yaml` through llm's 
   api_key_name: deepseek
 ```
 
-`api_key_name` must match the key name in `.llm/keys.json`. To switch:
+`api_key_name` must match the key name in `.llm/keys.json`.
 
-1. Add the model to the YAML file if it isn't there.
-2. Check that it works: `LLM_USER_PATH=/var/www/digest/.llm llm -m deepseek-v4-pro "Reply with just: OK"`
-3. Change `llm_model` in `nginx_digest.py`.
-4. Compare the commentary with `python nginx_digest.py --stdout --no-history`.
+#### Changing the model
 
-If the model name is wrong, the script still sends the email, just without the AI commentary, and logs a "model not found" warning in `nginx_digest.log`.
-
-Choosing a model: `deepseek-flash` is enough for this job. The script does the classification and counting, and the AI only comments on the finished report. `deepseek-v4-pro` costs about 4x as much (still only a few dollars a year at one run a day), and the difference is mostly in wording. See [DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing).
+Edit line 108 of `nginx_digest.py` to switch between `deepseek-flash` and `deepseek-v4-pro`. The former is cheaper and faster, the latter is more capable. The LLM is used only for commentary, not for classification, so you can run the script without it (`--no-llm`) if you want to save money.
 
 <br>
 
