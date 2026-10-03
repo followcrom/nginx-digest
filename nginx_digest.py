@@ -102,7 +102,8 @@ CONFIG = {
     "email_to": os.getenv("EMAIL_TO"),
 
     # LLM settings (using the llm library)
-    "llm_model": "deepseek-flash",
+    # Choose between deepseek-v4-pro and deepseek-flash
+    "llm_model": "deepseek-v4-pro",
 
     # Used in build_sessions() to decide when to create a new session vs. continuing an existing one
     "session_timeout_minutes": 30,
@@ -2100,7 +2101,7 @@ def main(argv=None):
         # STAGE 3: Compose and send email
         # =================================================================
         logger.info("STAGE 3: Composing and sending email")
-        subject = f"followCrom Traffic Report for {target_date}"
+        subject = f"Traffic Report for {target_date}"
 
         if send_email(subject=subject, body=email_body, to_addr=CONFIG["email_to"],
                       attachments={report_filename: report}):
