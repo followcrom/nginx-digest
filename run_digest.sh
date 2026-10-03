@@ -11,20 +11,14 @@ cd /var/www/digest || {
     exit 1
 }
 
-# Activate virtual environment
-source "$VENV_PATH/bin/activate"
-
 # Add timestamp header to log
 echo "========================================" >> "$LOG_FILE"
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Nginx Analytics" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 
-# Run Python script
-python_output=$(python "$SCRIPT_PATH" 2>&1)
+# Run Python script with the venv's interpreter (no activation needed, works under sh or bash)
+python_output=$("$VENV_PATH/bin/python" "$SCRIPT_PATH" 2>&1)
 exit_code=$?
-
-# Deactivate virtual environment
-deactivate
 
 # Log script output
 echo "$python_output" >> "$LOG_FILE"
@@ -50,4 +44,4 @@ $python_output"
 fi
 
 # Success
-echo -e "Cron job complete!\n" >> "$LOG_FILE"
+printf "Cron job complete!\n\n" >> "$LOG_FILE"

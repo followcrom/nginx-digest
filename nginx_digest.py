@@ -102,7 +102,7 @@ CONFIG = {
     "email_to": os.getenv("EMAIL_TO"),
 
     # LLM settings (using the llm library)
-    "llm_model": "deepseek-chat",
+    "llm_model": "deepseek-flash",
 
     # Used in build_sessions() to decide when to create a new session vs. continuing an existing one
     "session_timeout_minutes": 30,
@@ -1788,6 +1788,90 @@ def generate_text_report(analytics: dict, history: Optional[dict] = None) -> str
     return report
 
 
+def _vs_baseline(today: float, avg: float) -> str:
+    if avg <= 0:
+        return ""
+    change = (today - avg) / avg * 100
+    return f" ({change:+.0f}% vs avg)" if abs(change) >= 1 else " (≈ avg)"
+
+
+def generate_email_summary(analytics: dict, history: Optional[dict] = None) -> str:
+    """Short digest for the email body. The full report goes to the LLM and as an attachment."""
+    s = analytics["summary"]
+    lines = [f"NGINX DIGEST - {analytics['date']}", ""]
+
+    if analytics.get("security_alerts"):
+        lines.append("ALERTS")
+        for alert in analytics["security_alerts"]:
+            symbol = "🔴" if alert["severity"] == "HIGH" else "🟡"
+            lines.append(f"  {symbol} {alert['message']}")
+        lines.append("")
+
+    a = history["avg"] if history else {}
+    lines += [
+        "TODAY",
+        f"  Human sessions: {s['human_sessions']} from {s['human_ips']} IP(s)"
+        + _vs_baseline(s["human_sessions"], a.get("human_sessions", 0)),
+        f"  Requests:       {s['total_requests']}" + _vs_baseline(s["total_requests"], a.get("total_requests", 0)),
+        f"  Bot sessions:   {s['bot_sessions']} (+{s['unverified_sessions']} unverified)",
+        f"  Probe requests: {s['probe_requests']}" + _vs_baseline(s["probe_requests"], a.get("probe_requests", 0)),
+        "",
+    ]
+
+    lines.append("HUMANS")
+    humans = analytics["human_detail"]
+    if humans:
+        for h in humans[:5]:
+            pages = ", ".join(h["pages"][:3]) or "-"
+            lines.append(f"  {h['time']}  {h['location']}  ·  {h['browser']}  ·  "
+                         f"{format_duration(h['duration'])}  ·  {pages}")
+        if len(humans) > 5:
+            lines.append(f"  ... and {len(humans) - 5} more (see attachment)")
+    else:
+        lines.append("  None today.")
+    lines.append("")
+
+    def one_line(counter: dict, limit: int = 5) -> str:
+        return ", ".join(f"{k} {v}" for k, v in list(counter.items())[:limit])
+
+    breakdowns = [
+        ("Top pages", analytics["top_pages_human"]),
+        ("Countries", analytics["human_countries"]),
+        ("Cities", analytics["human_cities"]),
+        ("Devices", analytics["devices"]),
+        ("Browsers", analytics["browsers"]),
+        ("OS", analytics["operating_systems"]),
+        ("Referrers", analytics["referrers"]),
+    ]
+    breakdowns = [(label, c) for label, c in breakdowns if c]
+    if breakdowns:
+        lines.append("HUMAN BREAKDOWN")
+        for label, counter in breakdowns:
+            lines.append(f"  {label + ':':<11} {one_line(counter)}")
+        lines.append("")
+
+    if analytics["top_bot_ips"]:
+        lines.append("TOP BOT IPs")
+        for ip, d in analytics["top_bot_ips"][:3]:
+            org = f" | {d['asn_org']}" if d["asn_org"] else ""
+            lines.append(f"  {d['requests']:>5}  {ip}  {d['name']}{org}")
+        lines.append("")
+
+    if analytics["bot_countries"]:
+        lines.append("BOT & UNVERIFIED TRAFFIC BY COUNTRY (unique IPs)")
+        for country, count in list(analytics["bot_countries"].items())[:8]:
+            lines.append(f"  {count:>5}  {country}")
+        lines.append("")
+
+    if analytics["top_pages_all"]:
+        lines.append("MOST REQUESTED PAGES (all traffic, excluding probes & assets)")
+        for page, count in list(analytics["top_pages_all"].items())[:8]:
+            lines.append(f"  {count:>5}  {page}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def dump_sessions(sessions_by_ip: dict[str, list[VisitorSession]], limit: int = 80) -> str:
     """Per-session verdict table for inspecting the classifier."""
     all_sessions = [s for sessions in sessions_by_ip.values() for s in sessions]
@@ -1836,6 +1920,21 @@ session into exactly one of three buckets:
                no assets. On a site like this these are almost always bots spoofing a browser. Treat them as
                probable bots. Never describe them as visitors, readers, or an audience.
 
+Facts about the server setup (take these into account before suggesting changes):
+- One nginx server hosts three sites that share this access log: followcrom.com (the portfolio),
+  mixtape.followcrom.com and ttt.followcrom.com.
+- followcrom.com is mostly static files. The only parts that run code are the PHP contact form (/contact/),
+  /wotd/subscribe.php, /adom_splitter/random_wisdom.php, a proxied app at /momcon, and the ttt site
+  (a proxied Django app). mixtape also runs some PHP.
+- Already in place: blockips.conf (an IP blocklist), block_probes.conf (returns 404 for common probe paths),
+  rate limits on the PHP and /momcon locations, and HTTP Basic Auth on /w2w/ and ttt's /admin/.
+- /audio answers OPTIONS for CORS, so OPTIONS must stay allowed.
+- Probes that get a 404 from static files cost the server almost nothing. Background scanning is the normal
+  cost of being on the internet; reducing how big it looks in the log is not a goal in itself.
+- Never suggest blocking whole cloud providers or large ASNs (Microsoft/AS8075, Google, Amazon, ...): they
+  carry search crawlers and link-preview bots too. Single-IP blocks are only worth it for an IP hammering
+  the parts that run code.
+
 Today: {s['total_requests']} requests, {s['bot_sessions']} bot sessions, {s['unverified_sessions']} unverified sessions,
 {s['human_sessions']} verified human sessions from {s['human_ips']} IP(s).{baseline}
 
@@ -1844,19 +1943,19 @@ Rules for your commentary:
   unverified traffic. If there were zero verified humans, say so plainly and do not soften it.
 - Do not restate the numbers back at length; interpret them.
 - Be concrete about anything worth blocking (IPs, ASNs, paths) and anything that changed versus the baseline.
-- Keep it under 350 words, in a conversational tone, as a colleague reviewing the stats with me.
+- Use a conversational tone, as a colleague reviewing the stats with me.
 
 Here is today's report:
 
 {report}
 
-Please cover, briefly:
+Please cover:
 1. What real humans (if any) did today: where from, what they looked at, anything notable.
 2. What the automated traffic was doing, by category, and whether anything looks like a targeted attack
    rather than background internet noise.
 3. Security: probe patterns, alerts, fake crawlers, top offending IPs or networks worth blocking.
 4. How today compares with the baseline (if one is given).
-5. One or two concrete, actionable suggestions.
+5. One or two concrete, actionable suggestions that fit the setup above, or say that nothing needs doing.
 If there were no humans at all, a light-hearted line about the lack of visitors is welcome."""
 
 
@@ -1881,7 +1980,9 @@ def get_llm_analysis(prompt: str) -> str:
 # EMAIL
 # =============================================================================
 
-def send_email(subject: str, body: str, to_addr: str) -> bool:
+def send_email(subject: str, body: str, to_addr: str,
+               attachments: Optional[dict[str, str]] = None) -> bool:
+    """Send a plain-text email. attachments maps filename -> text content."""
     try:
         with smtplib.SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
@@ -1891,7 +1992,11 @@ def send_email(subject: str, body: str, to_addr: str) -> bool:
             msg["From"] = "Nginx Analysis Team"
             msg["To"] = to_addr
             msg["Subject"] = subject
-            msg.attach(MIMEText(body, "plain"))
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+            for filename, content in (attachments or {}).items():
+                part = MIMEText(content, "plain", "utf-8")
+                part.add_header("Content-Disposition", "attachment", filename=filename)
+                msg.attach(part)
             server.send_message(msg)
         return True
     except smtplib.SMTPException as e:
@@ -1910,7 +2015,8 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Nginx analytics daily digest")
     p.add_argument("--date", help="Date to analyse (YYYY-MM-DD). Default: yesterday")
     p.add_argument("--log", help=f"Access log path. Default: {CONFIG['log_path']}")
-    p.add_argument("--stdout", action="store_true", help="Print the report instead of emailing it")
+    p.add_argument("--stdout", action="store_true", help="Print the email body instead of emailing it")
+    p.add_argument("--full", action="store_true", help="With --stdout, also print the full report the LLM sees")
     p.add_argument("--no-llm", action="store_true", help="Skip the LLM commentary")
     p.add_argument("--no-history", action="store_true", help="Do not record today's numbers in the history file")
     p.add_argument("--sessions", action="store_true", help="Also print a per-session verdict table (implies --stdout)")
@@ -1976,30 +2082,28 @@ def main(argv=None):
             else:
                 logger.warning(f"LLM analysis issue: {llm_analysis}")
 
-        final_report = report
+        # The LLM saw the full report; the email body is the short summary plus its commentary,
+        # with the full report attached for when the detail is needed.
+        report_filename = f"nginx_digest_{target_date}.txt"
+        email_body = generate_email_summary(analytics, history)
         if llm_analysis and not llm_analysis.startswith("[LLM analysis"):
-            final_report += f"""
-
-DeepSeek says...
-{llm_analysis}
-
-That's all for today's Nginx analytics digest!
-"""
+            email_body += f"\nDEEPSEEK SAYS\n{llm_analysis}\n"
+        email_body += f"\nFull report attached ({report_filename}).\n"
 
         if args.stdout:
-            print(final_report)
+            print(email_body)
+            if args.full:
+                print(report)
             sys.exit(0)
 
         # =================================================================
         # STAGE 3: Compose and send email
         # =================================================================
         logger.info("STAGE 3: Composing and sending email")
-        subject = f"Nginx Digest for {target_date}: {s['human_sessions']} human, {s['bot_sessions']} bot sessions"
-        if analytics.get("security_alerts"):
-            high_alerts = sum(1 for a in analytics["security_alerts"] if a["severity"] == "HIGH")
-            subject = ("🔴 SECURITY ALERT - " if high_alerts else "⚠️ Alert - ") + subject
+        subject = f"followCrom Traffic Report for {target_date}"
 
-        if send_email(subject=subject, body=final_report, to_addr=CONFIG["email_to"]):
+        if send_email(subject=subject, body=email_body, to_addr=CONFIG["email_to"],
+                      attachments={report_filename: report}):
             logger.info(f"Email sent successfully to {CONFIG['email_to']}")
             sys.exit(0)
         logger.error("Failed to send email")

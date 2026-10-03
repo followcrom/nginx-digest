@@ -36,3 +36,6 @@ tests/
 
 # Markdown files
 *.md
+
+# Claude LLM files
+*.claude
